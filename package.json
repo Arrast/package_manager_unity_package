@@ -1,0 +1,8 @@
+{
+  "name": "com.versoft.package_manager",
+  "version": "1.0.0",
+  "displayName": "Package Manager",
+  "description": "This is a custom package manager",
+  "unity": "2021.2",
+  "unityRelease": "8f1"
+}
