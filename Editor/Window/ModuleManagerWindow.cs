@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 using UnityEditor;
 using UnityEngine;
 
-namespace Versoft.ModuleManager
+namespace versoft.module_manager
 {
     public class ModuleManagerWindow : EditorWindow
     {
