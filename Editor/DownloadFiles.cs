@@ -79,19 +79,29 @@ namespace versoft.module_manager
                 {
                     Directory.CreateDirectory(ExternalModulesDirectory);
                 }
+
                 zip.ExtractToDirectory(ExternalModulesDirectory, true);
                 if (zip.Entries != null && zip.Entries.Count > 0)
                 {
                     var zipEntry = zip.Entries[0];
-                    if (Directory.Exists(Path.Combine(ExternalModulesDirectory, zipEntry.FullName)))
+
+                    // Delete the other folder
+                    string moduleDirectory = Path.Combine(ExternalModulesDirectory, folderName);
+                    if (Directory.Exists(moduleDirectory))
                     {
-                        Directory.Move(Path.Combine(ExternalModulesDirectory, zipEntry.FullName), Path.Combine(ExternalModulesDirectory, folderName));
+                        Directory.Delete(moduleDirectory, true);
+                    }
+
+                    // Move from the new folder to the expected folder
+                    string fileDirectory = Path.Combine(ExternalModulesDirectory, zipEntry.FullName);
+                    if (Directory.Exists(fileDirectory))
+                    {
+                        Directory.Move(fileDirectory, moduleDirectory);
                     }
                 }
                 zip.Dispose();
             }
         }
-
 
         public static async Task<Dependencies> DownloadDependencyFile(string owner, string token, string repo, string branch)
         {

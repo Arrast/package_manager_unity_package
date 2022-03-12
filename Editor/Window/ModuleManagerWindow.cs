@@ -16,22 +16,33 @@ namespace versoft.module_manager
         public string gitUserToken;
         public string repositoryToDownload;
         public string branchToDownload;
-        private Dependencies _dependencies = new Dependencies();
-        private Dependencies storedDependencies = new Dependencies();
+        private Dependencies _dependencies;
+        private Dependencies _storedDependencies;
         private Task runningTask = null;
 
         [MenuItem("Versoft/PackageManager/Open #p")]
         static void Init()
         {
             ModuleManagerWindow window = EditorWindow.GetWindow<ModuleManagerWindow>();
-            window.gitUserId = PlayerPrefs.GetString(Const.UserNamePlayerPrefsKey, "");
-            window.gitUserToken = PlayerPrefs.GetString(Const.UserTokenPlayerPrefsKey, "");
             window.Show();
+        }
+
+        private void OnEnable()
+        {
+            gitUserId = PlayerPrefs.GetString(Const.UserNamePlayerPrefsKey, "");
+            gitUserToken = PlayerPrefs.GetString(Const.UserTokenPlayerPrefsKey, "");
+            _storedDependencies = new Dependencies();
+            LoadDependenciesFromJson();
         }
 
         private void OnGUI()
         {
             GUILayout.Label("Base Settings", EditorStyles.boldLabel);
+
+            if(runningTask != null && runningTask.Status == TaskStatus.RanToCompletion)
+            {
+                runningTask = null;
+            }
 
             EditorGUI.BeginDisabledGroup(runningTask != null);
             
@@ -44,8 +55,33 @@ namespace versoft.module_manager
             {
                 runningTask = GetPackageFromGithub();
             }
-            
+
+            if(GUILayout.Button("Update Packages"))
+            {
+                runningTask = UpdatePackages();
+            }
             EditorGUI.EndDisabledGroup();
+        }
+
+        private async Task UpdatePackages()
+        {
+            // Set up the dependencies
+            _storedDependencies = new Dependencies(_dependencies);
+
+            // Get the packages from github
+            await GetPackageWithDependencies(true);
+
+            // Update the persistent Dependencies dictionary
+            UpdateDependenciesJson();
+
+            // Save the user data to make it easier for next time.
+            PlayerPrefs.SetString(Const.UserNamePlayerPrefsKey, gitUserId);
+            PlayerPrefs.SetString(Const.UserTokenPlayerPrefsKey, gitUserToken);
+
+            // Refresh the Database
+            AssetDatabase.Refresh();
+
+            runningTask = null;
         }
 
         private async Task GetPackageFromGithub()
@@ -75,7 +111,7 @@ namespace versoft.module_manager
         private async Task<bool> CalculateDependencies(string package, string branch)
         {
             LoadDependenciesFromJson();
-            storedDependencies = new Dependencies();
+            _storedDependencies = new Dependencies();
             bool changes = false;
             try
             {
@@ -84,11 +120,11 @@ namespace versoft.module_manager
             catch (System.Exception e)
             {
                 UnityEngine.Debug.LogError(e.Message);
-                storedDependencies.dependencies.Clear();
+                _storedDependencies.dependencies.Clear();
             }
             finally
             {
-                changes = storedDependencies.dependencies != null && storedDependencies.dependencies.Count > 0;
+                changes = _storedDependencies.dependencies != null && _storedDependencies.dependencies.Count > 0;
 
             }
             return changes;
@@ -97,7 +133,7 @@ namespace versoft.module_manager
         private async Task CalculateDependenciesInternal(string package, string branch)
         {
             // First we store it in the dependencies.
-            storedDependencies.dependencies.Add(package, branch);
+            _storedDependencies.dependencies.Add(package, branch);
 
             // Then we check the dependencies of this package.
             var dependencies = await GetPackageDependencies(package, branch);
@@ -105,11 +141,11 @@ namespace versoft.module_manager
             {
                 foreach (var pair in dependencies.dependencies)
                 {
-                    if (storedDependencies.dependencies.ContainsKey(pair.Key) && storedDependencies.dependencies[pair.Key] != pair.Value)
+                    if (_storedDependencies.dependencies.ContainsKey(pair.Key) && _storedDependencies.dependencies[pair.Key] != pair.Value)
                     {
                         throw new System.Exception("Invalid Dependencies");
                     }
-                    else if (!storedDependencies.dependencies.ContainsKey(pair.Key))
+                    else if (!_storedDependencies.dependencies.ContainsKey(pair.Key))
                     {
                         await CalculateDependenciesInternal(pair.Key, pair.Value);
                     }
@@ -118,14 +154,14 @@ namespace versoft.module_manager
 
         }
 
-        private async Task GetPackageWithDependencies()
+        private async Task GetPackageWithDependencies(bool forceDownload = false)
         {
-            if (storedDependencies.dependencies != null)
+            if (_storedDependencies.dependencies != null)
             {
                 List<Package> packages = new List<Package>();
-                foreach (var pair in storedDependencies.dependencies)
+                foreach (var pair in _storedDependencies.dependencies)
                 {
-                    if (!_dependencies.dependencies.ContainsKey(pair.Key))
+                    if (!_dependencies.dependencies.ContainsKey(pair.Key) || forceDownload)
                     {
                         Package package = new Package
                         {
@@ -142,9 +178,9 @@ namespace versoft.module_manager
 
         private void UpdateDependenciesJson()
         {
-            if (storedDependencies.dependencies != null)
+            if (_storedDependencies.dependencies != null)
             {
-                foreach (var pair in storedDependencies.dependencies)
+                foreach (var pair in _storedDependencies.dependencies)
                 {
                     if (!_dependencies.dependencies.ContainsKey(pair.Key))
                     {
@@ -172,7 +208,6 @@ namespace versoft.module_manager
                 {
                     Directory.CreateDirectory(directory);
                 }
-
 
                 FileStream fileStream = File.Open(Path.Combine(directory, Const.DependenciesFileName), FileMode.OpenOrCreate);
                 var stream = new StreamReader(fileStream);
